@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -102,6 +104,9 @@ variance_distributions = []
 plt.figure(figsize=(12, 8))
 sns.set(style="whitegrid")
 
+# 使用 StratifiedKFold 以确保每一折具有相似的类分布
+kf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+
 # 测试每个阈值
 for thresh in threshold_percentages:
     # 应用方差阈值法
@@ -119,17 +124,18 @@ for thresh in threshold_percentages:
     plt.savefig(f'{output_dir}/variance_distribution_{thresh}percent.png', dpi=300)
     plt.close()
     
-    # 数据标准化
-    scaler = StandardScaler()
-    data_scaled = scaler.fit_transform(filtered_features)
-    
-    # 初始化模型
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    # =================== 数据标准化和模型 ============================
+    # 构建 Pipeline 确保每折的处理方法是一致的
+    pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='most_frequent')),  # 填补缺失值
+        ('scaler', StandardScaler()),  # 标准化
+        ('model', RandomForestClassifier(n_estimators=100, random_state=42))  # 随机森林分类器
+    ])
     
     # 执行交叉验证（10折）
-    accuracy_scores = cross_val_score(model, data_scaled, encoded_labels, cv=10, scoring='accuracy')
-    precision_scores = cross_val_score(model, data_scaled, encoded_labels, cv=10, scoring='precision_weighted')
-    recall_scores = cross_val_score(model, data_scaled, encoded_labels, cv=10, scoring='recall_weighted')
+    accuracy_scores = cross_val_score(pipeline, filtered_features, encoded_labels, cv=kf, scoring='accuracy')
+    precision_scores = cross_val_score(pipeline, filtered_features, encoded_labels, cv=kf, scoring='precision_weighted')
+    recall_scores = cross_val_score(pipeline, filtered_features, encoded_labels, cv=kf, scoring='recall_weighted')
     
     # 计算统计量
     accuracy_mean = np.mean(accuracy_scores)
